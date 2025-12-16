@@ -7,7 +7,13 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-app.use(express.static('public'));
+// Serve static files from the root directory (not 'public')
+app.use(express.static(path.join(__dirname)));
+
+// Serve index.html at the root route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 const players = {};
 const powerups = [];
@@ -309,7 +315,8 @@ function getRandomColor() {
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-const PORT = process.env.PORT || 3000;
+// Use port 10000 to match your deployment configuration
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Racing game server running on port ${PORT}`);
 });
