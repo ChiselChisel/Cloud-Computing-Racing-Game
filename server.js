@@ -12,7 +12,7 @@ const io = socketIo(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  transports: ['websocket', 'polling'], // Allow both transports
+  transports: ['websocket', 'polling'],
   pingTimeout: 60000,
   pingInterval: 25000
 });
@@ -36,24 +36,28 @@ let countdownValue = 3;
 let raceStartTime = null;
 let leaderboard = [];
 
-// Generate powerups and obstacles
+// Generate powerups and obstacles - UPDATED VERSION
 function generateTrackElements() {
   powerups.length = 0;
   obstacles.length = 0;
   
+  // Generate 15 powerups spread evenly along the track
+  const powerupSpacing = TRACK_LENGTH / 16; // Divide track into sections
   for (let i = 0; i < 15; i++) {
     powerups.push({
       id: `powerup-${i}`,
-      position: Math.random() * (TRACK_LENGTH - 500) + 200,
+      position: (i + 1) * powerupSpacing + (Math.random() * 200 - 100), // Add some randomness
       active: true,
       type: 'boost'
     });
   }
   
+  // Generate 10 obstacles spread evenly, offset from powerups
+  const obstacleSpacing = TRACK_LENGTH / 11;
   for (let i = 0; i < 10; i++) {
     obstacles.push({
       id: `obstacle-${i}`,
-      position: Math.random() * (TRACK_LENGTH - 500) + 200,
+      position: (i + 0.5) * obstacleSpacing + (Math.random() * 150 - 75), // Offset and add randomness
       type: 'cone'
     });
   }
