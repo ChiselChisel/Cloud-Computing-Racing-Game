@@ -5,9 +5,19 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
 
-// Serve static files from the root directory (not 'public')
+// Configure Socket.IO with CORS for production
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  },
+  transports: ['websocket', 'polling'], // Allow both transports
+  pingTimeout: 60000,
+  pingInterval: 25000
+});
+
+// Serve static files from the root directory
 app.use(express.static(path.join(__dirname)));
 
 // Serve index.html at the root route
@@ -21,27 +31,25 @@ const obstacles = [];
 const TRACK_LENGTH = 5000;
 const LAPS_TO_WIN = 3;
 const FINISH_LINE = TRACK_LENGTH;
-let gameState = 'lobby'; // lobby, countdown, racing, finished
+let gameState = 'lobby';
 let countdownValue = 3;
 let raceStartTime = null;
-let leaderboard = []; // In-memory leaderboard (reset on server restart)
+let leaderboard = [];
 
 // Generate powerups and obstacles
 function generateTrackElements() {
   powerups.length = 0;
   obstacles.length = 0;
   
-  // Generate 15 powerups along the track
   for (let i = 0; i < 15; i++) {
     powerups.push({
       id: `powerup-${i}`,
       position: Math.random() * (TRACK_LENGTH - 500) + 200,
       active: true,
-      type: 'boost' // boost, shield, etc
+      type: 'boost'
     });
   }
   
-  // Generate 10 obstacles
   for (let i = 0; i < 10; i++) {
     obstacles.push({
       id: `obstacle-${i}`,
@@ -56,7 +64,6 @@ generateTrackElements();
 io.on('connection', (socket) => {
   console.log('New player connected:', socket.id);
   
-  // Handle player joining with username
   socket.on('joinGame', (username) => {
     players[socket.id] = {
       id: socket.id,
@@ -76,7 +83,6 @@ io.on('connection', (socket) => {
       bestTime: null
     };
 
-    // Send current game state to new player
     socket.emit('init', {
       playerId: socket.id,
       players: players,
@@ -89,12 +95,12 @@ io.on('connection', (socket) => {
       leaderboard: leaderboard
     });
 
-    // Broadcast new player to all other players
     io.emit('playerJoined', players[socket.id]);
     io.emit('updateLobby', Object.values(players).map(p => ({ name: p.name, ready: false })));
+    
+    console.log(`Player joined: ${username} (Total players: ${Object.keys(players).length})`);
   });
 
-  // Handle chat messages
   socket.on('chatMessage', (message) => {
     if (players[socket.id]) {
       io.emit('chatMessage', {
@@ -105,7 +111,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle car selection
   socket.on('selectCar', (carType) => {
     if (players[socket.id]) {
       players[socket.id].carType = carType;
@@ -113,24 +118,20 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle start race request
   socket.on('startRace', () => {
     if (gameState === 'lobby' && Object.keys(players).length > 0) {
       startCountdown();
     }
   });
 
-  // Handle clicks (spam click mechanic)
   socket.on('click', () => {
     if (players[socket.id] && gameState === 'racing' && !players[socket.id].finished) {
-      // Each click gives a speed boost
       const boostAmount = players[socket.id].hasPowerup ? 2.5 : 1.8;
       players[socket.id].speed = Math.min(players[socket.id].speed + boostAmount, 20);
       players[socket.id].clicks++;
     }
   });
 
-  // Handle powerup usage
   socket.on('usePowerup', () => {
     if (players[socket.id] && players[socket.id].hasPowerup) {
       players[socket.id].speed = Math.min(players[socket.id].speed + 15, 30);
@@ -147,19 +148,18 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle player reset
   socket.on('reset', () => {
     resetGame();
   });
 
-  // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Player disconnected:', socket.id);
     const playerName = players[socket.id]?.name;
     delete players[socket.id];
     io.emit('playerLeft', { id: socket.id, name: playerName });
     
-    // If no players left, reset game
+    console.log(`Player left: ${playerName} (Total players: ${Object.keys(players).length})`);
+    
     if (Object.keys(players).length === 0) {
       resetGame();
     }
@@ -169,7 +169,7 @@ io.on('connection', (socket) => {
 function startCountdown() {
   gameState = 'countdown';
   countdownValue = 3;
-  generateTrackElements(); // Regenerate powerups and obstacles
+  generateTrackElements();
   io.emit('gameStateChange', { state: gameState, countdown: countdownValue });
   io.emit('trackElements', { powerups, obstacles });
   
@@ -207,7 +207,6 @@ function resetGame() {
   io.emit('gameReset', { state: gameState, players: players, powerups, obstacles });
 }
 
-// Game loop - update positions and broadcast
 setInterval(() => {
   if (gameState !== 'racing') return;
   
@@ -218,10 +217,8 @@ setInterval(() => {
     if (!players[id].finished) {
       allFinished = false;
       
-      // Update position based on speed
       players[id].position += players[id].speed;
       
-      // Check for lap completion
       if (players[id].position >= TRACK_LENGTH * players[id].currentLap) {
         if (players[id].currentLap < LAPS_TO_WIN) {
           players[id].currentLap++;
@@ -229,7 +226,6 @@ setInterval(() => {
         }
       }
       
-      // Check powerup collection
       powerups.forEach(powerup => {
         if (powerup.active && Math.abs(players[id].position - powerup.position) < 50) {
           players[id].hasPowerup = true;
@@ -238,7 +234,6 @@ setInterval(() => {
         }
       });
       
-      // Check obstacle collision
       if (!players[id].isInvincible) {
         obstacles.forEach(obstacle => {
           if (Math.abs(players[id].position - obstacle.position) < 40) {
@@ -248,12 +243,10 @@ setInterval(() => {
         });
       }
       
-      // Apply friction (car slows down if not clicking)
       if (players[id].speed > 0) {
         players[id].speed = Math.max(0, players[id].speed - 0.25);
       }
       
-      // Check if finished (completed all laps)
       if (players[id].position >= TRACK_LENGTH * LAPS_TO_WIN) {
         players[id].position = TRACK_LENGTH * LAPS_TO_WIN;
         players[id].finished = true;
@@ -261,7 +254,6 @@ setInterval(() => {
         players[id].finishTime = finishTime;
         players[id].totalRaces++;
         
-        // Update leaderboard
         const existingEntry = leaderboard.find(entry => entry.name === players[id].name);
         if (!existingEntry || finishTime < existingEntry.time) {
           if (existingEntry) {
@@ -274,10 +266,9 @@ setInterval(() => {
             });
           }
           leaderboard.sort((a, b) => a.time - b.time);
-          leaderboard = leaderboard.slice(0, 10); // Keep top 10
+          leaderboard = leaderboard.slice(0, 10);
         }
         
-        // Check if winner (first to finish)
         const finishedPlayers = Object.values(players).filter(p => p.finished);
         if (finishedPlayers.length === 1) {
           players[id].wins++;
@@ -298,25 +289,23 @@ setInterval(() => {
     }
   }
   
-  // Check if all players finished
   if (allFinished && Object.keys(players).length > 0) {
     gameState = 'finished';
     io.emit('gameStateChange', { state: gameState });
   }
   
-  // Broadcast updates if there were any changes
   if (updates) {
     io.emit('gameUpdate', players);
   }
-}, 50); // 20 FPS
+}, 50);
 
 function getRandomColor() {
   const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2'];
   return colors[Math.floor(Math.random() * colors.length)];
 }
 
-// Use port 10000 to match your deployment configuration
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Racing game server running on port ${PORT}`);
+  console.log(`Players can connect at: http://localhost:${PORT}`);
 });
