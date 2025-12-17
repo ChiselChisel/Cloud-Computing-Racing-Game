@@ -6,7 +6,6 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// Configure Socket.IO with CORS for production
 const io = socketIo(server, {
   cors: {
     origin: "*",
@@ -17,17 +16,14 @@ const io = socketIo(server, {
   pingInterval: 25000
 });
 
-// Serve static files from the root directory
 app.use(express.static(path.join(__dirname)));
 
-// Serve index.html at the root route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 const players = {};
 const powerups = [];
-const obstacles = [];
 const TRACK_LENGTH = 5000;
 const LAPS_TO_WIN = 3;
 const FINISH_LINE = TRACK_LENGTH;
@@ -36,29 +32,18 @@ let countdownValue = 3;
 let raceStartTime = null;
 let leaderboard = [];
 
-// Generate powerups and obstacles - UPDATED VERSION
+// Generate powerups only - NO OBSTACLES
 function generateTrackElements() {
   powerups.length = 0;
-  obstacles.length = 0;
   
   // Generate 15 powerups spread evenly along the track
-  const powerupSpacing = TRACK_LENGTH / 16; // Divide track into sections
+  const powerupSpacing = TRACK_LENGTH / 16;
   for (let i = 0; i < 15; i++) {
     powerups.push({
       id: `powerup-${i}`,
-      position: (i + 1) * powerupSpacing + (Math.random() * 200 - 100), // Add some randomness
+      position: (i + 1) * powerupSpacing + (Math.random() * 100 - 50), // Small randomness
       active: true,
       type: 'boost'
-    });
-  }
-  
-  // Generate 10 obstacles spread evenly, offset from powerups
-  const obstacleSpacing = TRACK_LENGTH / 11;
-  for (let i = 0; i < 10; i++) {
-    obstacles.push({
-      id: `obstacle-${i}`,
-      position: (i + 0.5) * obstacleSpacing + (Math.random() * 150 - 75), // Offset and add randomness
-      type: 'cone'
     });
   }
 }
@@ -69,6 +54,11 @@ io.on('connection', (socket) => {
   console.log('New player connected:', socket.id);
   
   socket.on('joinGame', (username) => {
+    if (players[socket.id]) {
+      console.log('Player already exists, skipping duplicate join');
+      return;
+    }
+    
     players[socket.id] = {
       id: socket.id,
       name: username || `Player${Object.keys(players).length}`,
@@ -84,7 +74,8 @@ io.on('connection', (socket) => {
       carType: 'default',
       totalRaces: 0,
       wins: 0,
-      bestTime: null
+      bestTime: null,
+      engineBlown: false
     };
 
     socket.emit('init', {
@@ -93,7 +84,7 @@ io.on('connection', (socket) => {
       gameState: gameState,
       countdown: countdownValue,
       powerups: powerups,
-      obstacles: obstacles,
+      obstacles: [], // Empty obstacles array
       trackLength: TRACK_LENGTH,
       lapsToWin: LAPS_TO_WIN,
       leaderboard: leaderboard
@@ -129,7 +120,28 @@ io.on('connection', (socket) => {
   });
 
   socket.on('click', () => {
-    if (players[socket.id] && gameState === 'racing' && !players[socket.id].finished) {
+    if (players[socket.id] && gameState === 'racing' && !players[socket.id].finished && !players[socket.id].engineBlown) {
+      // 1% chance of engine blow per click
+      if (Math.random() < 0.01) {
+        players[socket.id].engineBlown = true;
+        players[socket.id].speed = 0;
+        io.emit('engineBlown', { 
+          playerId: socket.id, 
+          playerName: players[socket.id].name 
+        });
+        
+        setTimeout(() => {
+          if (players[socket.id]) {
+            players[socket.id].engineBlown = false;
+            io.emit('engineRepaired', { 
+              playerId: socket.id, 
+              playerName: players[socket.id].name 
+            });
+          }
+        }, 3000);
+        return;
+      }
+      
       const boostAmount = players[socket.id].hasPowerup ? 2.5 : 1.8;
       players[socket.id].speed = Math.min(players[socket.id].speed + boostAmount, 20);
       players[socket.id].clicks++;
@@ -175,7 +187,7 @@ function startCountdown() {
   countdownValue = 3;
   generateTrackElements();
   io.emit('gameStateChange', { state: gameState, countdown: countdownValue });
-  io.emit('trackElements', { powerups, obstacles });
+  io.emit('trackElements', { powerups, obstacles: [] }); // No obstacles
   
   const countdownInterval = setInterval(() => {
     countdownValue--;
@@ -205,10 +217,11 @@ function resetGame() {
     players[id].clicks = 0;
     players[id].hasPowerup = false;
     players[id].isInvincible = false;
+    players[id].engineBlown = false;
   }
   
   generateTrackElements();
-  io.emit('gameReset', { state: gameState, players: players, powerups, obstacles });
+  io.emit('gameReset', { state: gameState, players: players, powerups, obstacles: [] });
 }
 
 setInterval(() => {
@@ -221,7 +234,9 @@ setInterval(() => {
     if (!players[id].finished) {
       allFinished = false;
       
-      players[id].position += players[id].speed;
+      if (!players[id].engineBlown) {
+        players[id].position += players[id].speed;
+      }
       
       if (players[id].position >= TRACK_LENGTH * players[id].currentLap) {
         if (players[id].currentLap < LAPS_TO_WIN) {
@@ -230,6 +245,7 @@ setInterval(() => {
         }
       }
       
+      // Check powerup collection
       powerups.forEach(powerup => {
         if (powerup.active && Math.abs(players[id].position - powerup.position) < 50) {
           players[id].hasPowerup = true;
@@ -238,19 +254,12 @@ setInterval(() => {
         }
       });
       
-      if (!players[id].isInvincible) {
-        obstacles.forEach(obstacle => {
-          if (Math.abs(players[id].position - obstacle.position) < 40) {
-            players[id].speed = Math.max(0, players[id].speed - 5);
-            io.emit('obstacleHit', { playerId: id, obstacleId: obstacle.id });
-          }
-        });
-      }
-      
-      if (players[id].speed > 0) {
+      // Apply friction
+      if (players[id].speed > 0 && !players[id].engineBlown) {
         players[id].speed = Math.max(0, players[id].speed - 0.25);
       }
       
+      // Check if finished
       if (players[id].position >= TRACK_LENGTH * LAPS_TO_WIN) {
         players[id].position = TRACK_LENGTH * LAPS_TO_WIN;
         players[id].finished = true;
