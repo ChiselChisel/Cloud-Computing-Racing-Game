@@ -1,919 +1,926 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Epic Multiplayer Racing</title>
-  <script src="/socket.io/socket.io.js"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Arial', sans-serif;
-      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      color: white;
-      overflow-x: hidden;
-    }
-    
-    #loginScreen {
-      background: rgba(0, 0, 0, 0.8);
-      padding: 40px;
-      border-radius: 20px;
-      text-align: center;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-    }
-    
-    #loginScreen h1 {
-      font-size: 48px;
-      margin-bottom: 20px;
-      text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
-    }
-    
-    #loginScreen input {
-      padding: 15px;
-      font-size: 18px;
-      border: none;
-      border-radius: 10px;
-      margin: 10px 0;
-      width: 300px;
-    }
-    
-    #loginScreen button {
-      padding: 15px 40px;
-      font-size: 20px;
-      margin-top: 10px;
-    }
-    
-    #gameContainer {
-      display: none;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(10px);
-      max-width: 1200px;
-      width: 95%;
-      margin: 20px;
-    }
-    
-    #topBar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    
-    h1 {
-      text-align: center;
-      font-size: 32px;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-    }
-    
-    #stats {
-      display: flex;
-      gap: 20px;
-      font-size: 14px;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 10px 20px;
-      border-radius: 10px;
-    }
-    
-    #trackContainer {
-      position: relative;
-      width: 100%;
-      height: 500px;
-      overflow: hidden;
-      border: 3px solid #FFD700;
-      border-radius: 15px;
-      background: linear-gradient(to bottom, #0f2027, #203a43, #2c5364);
-    }
-    
-    #track {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-      transition: transform 0.1s linear;
-    }
-    
-    .lane {
-      position: relative;
-      height: 70px;
-      border-bottom: 2px dashed #555;
-      display: flex;
-      align-items: center;
-    }
-    
-    .lane:last-child {
-      border-bottom: none;
-    }
-    
-    .car {
-      position: absolute;
-      left: 0;
-      width: 60px;
-      height: 50px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-      font-size: 28px;
-      transition: left 0.05s linear;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
-      z-index: 5;
-    }
-    
-    .car.invincible {
-      animation: invinciblePulse 0.3s infinite;
-    }
-    
-    @keyframes invinciblePulse {
-      0%, 100% { filter: brightness(1); }
-      50% { filter: brightness(1.5) drop-shadow(0 0 10px gold); }
-    }
-    
-    .powerup {
-      position: absolute;
-      width: 30px;
-      height: 30px;
-      font-size: 24px;
-      animation: float 2s ease-in-out infinite;
-    }
-    
-    @keyframes float {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-10px); }
-    }
-    
-    .obstacle {
-      position: absolute;
-      width: 30px;
-      height: 30px;
-      font-size: 24px;
-    }
-    
-    .finish-line {
-      position: absolute;
-      right: 0;
-      top: 0;
-      width: 50px;
-      height: 100%;
-      background: repeating-linear-gradient(
-        45deg,
-        #fff,
-        #fff 15px,
-        #000 15px,
-        #000 30px
-      );
-      opacity: 0.9;
-      z-index: 1;
-    }
-    
-    #minimap {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 200px;
-      height: 60px;
-      background: rgba(0, 0, 0, 0.7);
-      border: 2px solid #FFD700;
-      border-radius: 10px;
-      padding: 5px;
-      z-index: 10;
-    }
-    
-    .minimap-dot {
-      position: absolute;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      top: 50%;
-      transform: translateY(-50%);
-    }
-    
-    #countdown-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.8);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-size: 150px;
-      font-weight: bold;
-      color: #FFD700;
-      text-shadow: 0 0 30px rgba(255, 215, 0, 0.8);
-      z-index: 20;
-      animation: pulse 0.5s ease-in-out;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.2); }
-    }
-    
-    .go-text {
-      color: #00FF00 !important;
-      text-shadow: 0 0 30px rgba(0, 255, 0, 0.8) !important;
-    }
-    
-    #controls {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 10px;
-      margin: 20px 0;
-    }
-    
-    button {
-      padding: 15px 20px;
-      font-size: 16px;
-      font-weight: bold;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: all 0.3s;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    
-    button:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
-    }
-    
-    button:active:not(:disabled) {
-      transform: scale(0.95);
-    }
-    
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    #clickButton {
-      grid-column: 1 / -1;
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-      color: white;
-      font-size: 28px;
-      padding: 40px;
-    }
-    
-    #clickButton.has-powerup {
-      background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-      animation: powerupGlow 1s ease-in-out infinite;
-    }
-    
-    @keyframes powerupGlow {
-      0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-      50% { box-shadow: 0 0 40px rgba(255, 215, 0, 1); }
-    }
-    
-    #startButton {
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-    }
-    
-    #resetButton {
-      background: linear-gradient(135deg, #ee0979 0%, #ff6a00 100%);
-      color: white;
-    }
-    
-    #leaderboardBtn {
-      background: linear-gradient(135deg, #4776E6 0%, #8E54E9 100%);
-      color: white;
-    }
-    
-    #infoPanel {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 15px;
-      margin-top: 20px;
-    }
-    
-    .info-box {
-      background: rgba(0, 0, 0, 0.4);
-      padding: 15px;
-      border-radius: 10px;
-    }
-    
-    .info-box h3 {
-      margin-bottom: 10px;
-      color: #FFD700;
-    }
-    
-    #playerList {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    
-    .player-badge {
-      background: rgba(255, 255, 255, 0.2);
-      padding: 8px 15px;
-      border-radius: 10px;
-      font-size: 14px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    
-    #chatBox {
-      max-height: 200px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-    
-    .chat-message {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-size: 13px;
-    }
-    
-    #chatInput {
-      display: flex;
-      gap: 5px;
-      margin-top: 10px;
-    }
-    
-    #chatInput input {
-      flex: 1;
-      padding: 8px;
-      border: none;
-      border-radius: 5px;
-      background: rgba(255, 255, 255, 0.9);
-    }
-    
-    #chatInput button {
-      padding: 8px 15px;
-    }
-    
-    #progressBar {
-      width: 100%;
-      height: 30px;
-      background: rgba(0, 0, 0, 0.5);
-      border-radius: 15px;
-      margin: 10px 0;
-      overflow: hidden;
-      position: relative;
-    }
-    
-    #progressFill {
-      height: 100%;
-      background: linear-gradient(90deg, #00FF00, #FFD700);
-      width: 0%;
-      transition: width 0.1s linear;
-      border-radius: 15px;
-    }
-    
-    #lapIndicator {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-weight: bold;
-      font-size: 16px;
-      color: white;
-      text-shadow: 2px 2px 4px black;
-    }
-    
-    .finished {
-      opacity: 0.7;
-    }
-    
-    #modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    #modalContent {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 30px;
-      border-radius: 20px;
-      max-width: 500px;
-      width: 90%;
-      max-height: 80vh;
-      overflow-y: auto;
-    }
-    
-    .leaderboard-entry {
-      background: rgba(255, 255, 255, 0.1);
-      padding: 10px;
-      margin: 5px 0;
-      border-radius: 10px;
-      display: flex;
-      justify-content: space-between;
-    }
-    
-    .gold { color: #FFD700; }
-    .silver { color: #C0C0C0; }
-    .bronze { color: #CD7F32; }
-    
-    @media (max-width: 768px) {
-      #infoPanel {
-        grid-template-columns: 1fr;
-      }
-      
-      h1 {
-        font-size: 24px;
-      }
-      
-      #trackContainer {
-        height: 400px;
-      }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Racing Game</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        #app {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .game-area {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        #username-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        input[type="text"] {
+            padding: 12px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #764ba2;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        button {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #track-container {
+            position: relative;
+            height: 600px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98D8C8 100%);
+            border-radius: 10px;
+            overflow: hidden;
+            border: 3px solid #667eea;
+        }
+
+        #track {
+            position: relative;
+            height: 100%;
+            background: #2d5016;
+            border-radius: 150px;
+            transition: transform 0.05s linear;
+            box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.3);
+        }
+        
+        #track::before {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            right: 10%;
+            bottom: 10%;
+            border: 60px solid #444;
+            border-radius: 120px;
+            box-shadow: 
+                inset 0 0 0 3px yellow,
+                inset 0 0 0 6px #444,
+                inset 0 0 0 10px white,
+                inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #track::after {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 15%;
+            right: 15%;
+            bottom: 15%;
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 100px;
+        }
+
+        .lane {
+            position: absolute;
+            width: 100%;
+            height: 20%;
+            border-bottom: 2px dashed rgba(255, 255, 255, 0.3);
+        }
+
+        .car {
+            position: absolute;
+            width: 60px;
+            height: 40px;
+            transition: left 0.3s;
+            z-index: 10;
+        }
+        
+        .car.engine-blown {
+            animation: shake 0.5s ease-in-out infinite;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px) rotate(-2deg); }
+            75% { transform: translateX(3px) rotate(2deg); }
+        }
+
+        .car-body {
+            width: 100%;
+            height: 100%;
+            border-radius: 10px;
+            position: relative;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .car-window {
+            position: absolute;
+            top: 8px;
+            left: 15px;
+            right: 15px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+        }
+
+        .car-label {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+
+        .powerup, .obstacle {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            animation: float 2s ease-in-out infinite;
+        }
+
+        .powerup {
+            background: linear-gradient(135deg, #FFD700, #FFA500);
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+        }
+
+        .obstacle {
+            background: linear-gradient(135deg, #FF6B6B, #C92A2A);
+            box-shadow: 0 0 15px rgba(255, 107, 107, 0.6);
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .finish-line {
+            position: absolute;
+            right: 50px;
+            top: 10%;
+            width: 10px;
+            height: 80%;
+            background: repeating-linear-gradient(
+                45deg,
+                #000,
+                #000 20px,
+                #fff 20px,
+                #fff 40px
+            );
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+
+        #controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #click-button {
+            width: 100%;
+            height: 80px;
+            font-size: 1.5em;
+            background: linear-gradient(135deg, #FF6B6B 0%, #C92A2A 100%);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #click-button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.5);
+            transform: translate(-50%, -50%);
+            transition: width 0.3s, height 0.3s;
+        }
+
+        #click-button:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        #player-list {
+            list-style: none;
+        }
+
+        .player-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .player-name {
+            font-weight: 600;
+        }
+
+        .player-status {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        #chat-messages {
+            height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+
+        .chat-sender {
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        #leaderboard-list {
+            list-style: none;
+        }
+
+        .leaderboard-item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .leaderboard-rank {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.2em;
+            min-width: 30px;
+        }
+
+        .leaderboard-name {
+            flex: 1;
+            margin: 0 10px;
+        }
+
+        .leaderboard-time {
+            font-family: monospace;
+            color: #666;
+        }
+
+        #countdown-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        #countdown-number {
+            font-size: 15em;
+            color: white;
+            font-weight: bold;
+            text-shadow: 0 0 50px rgba(255, 255, 255, 0.5);
+            animation: pulse 1s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 1001;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        #game-state {
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+            
+            .sidebar {
+                order: -1;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div id="loginScreen">
-    <h1>🏁 EPIC RACING 🏁</h1>
-    <p style="font-size: 18px; margin-bottom: 20px;">Enter the arena!</p>
-    <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="20">
-    <br>
-    <button onclick="joinGame()" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;">START RACING</button>
-  </div>
+    <div id="app">
+        <header>
+            <h1>🏎️ Cloud Racing Game 🏁</h1>
+            <p>Multiplayer Click-to-Race Game</p>
+        </header>
 
-  <div id="gameContainer">
-    <div id="topBar">
-      <h1>🏎️ Epic Multiplayer Racing 🏎️</h1>
-      <div id="stats">
-        <span>⚡ Speed: <b id="speedometer">0</b></span>
-        <span>🔥 Clicks: <b id="clickCounter">0</b></span>
-        <span>📍 Lap: <b id="currentLap">1/3</b></span>
-      </div>
-    </div>
-    
-    <div id="progressBar">
-      <div id="progressFill"></div>
-      <div id="lapIndicator">Lap 1/3</div>
-    </div>
-    
-    <div id="trackContainer">
-      <div id="countdown-overlay"></div>
-      <div id="minimap"></div>
-      <div id="track">
-        <div class="finish-line"></div>
-      </div>
-    </div>
-    
-    <div id="controls">
-      <button id="startButton">🚦 START RACE</button>
-      <button id="resetButton">🔄 RESET</button>
-      <button id="leaderboardBtn" onclick="showLeaderboard()">🏆 LEADERBOARD</button>
-      <button id="clickButton" disabled>🏎️ CLICK TO DRIVE! 🏎️</button>
-    </div>
-    
-    <div id="infoPanel">
-      <div class="info-box">
-        <h3>👥 Players</h3>
-        <div id="playerList"></div>
-      </div>
-      <div class="info-box">
-        <h3>💬 Chat</h3>
-        <div id="chatBox"></div>
-        <div id="chatInput">
-          <input type="text" id="chatMessage" placeholder="Type message..." maxlength="100">
-          <button onclick="sendChat()">Send</button>
+        <div id="username-screen" class="panel" style="max-width: 400px; margin: 50px auto;">
+            <h2>Welcome!</h2>
+            <form id="username-form">
+                <input type="text" id="username-input" placeholder="Enter your username" maxlength="20" required>
+                <button type="submit">Join Game</button>
+            </form>
         </div>
-      </div>
+
+        <div id="game-screen" class="hidden">
+            <div class="container">
+                <div class="game-area">
+                    <div id="game-state">Waiting in Lobby...</div>
+                    
+                    <div id="track-container">
+                        <div id="track">
+                            <div class="finish-line"></div>
+                        </div>
+                    </div>
+
+                    <div id="controls">
+                        <button id="click-button" disabled>CLICK TO RACE! 🏎️</button>
+                        <button id="powerup-button" disabled style="margin-top: 10px;">Use Powerup ⚡</button>
+                        <div class="stats">
+                            <div class="stat-box">
+                                <div class="stat-label">Speed</div>
+                                <div class="stat-value" id="speed-display">0</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Lap</div>
+                                <div class="stat-value" id="lap-display">1/3</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Clicks</div>
+                                <div class="stat-value" id="clicks-display">0</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-label">Position</div>
+                                <div class="stat-value" id="position-display">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar">
+                    <div class="panel">
+                        <h2>Players</h2>
+                        <ul id="player-list"></ul>
+                        <button id="start-button">Start Race</button>
+                        <button id="reset-button" style="margin-top: 10px;">New Race</button>
+                    </div>
+
+                    <div class="panel">
+                        <h2>Chat</h2>
+                        <div id="chat-messages"></div>
+                        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="100">
+                    </div>
+
+                    <div class="panel">
+                        <h2>🏆 Leaderboard</h2>
+                        <ul id="leaderboard-list">
+                            <li style="text-align: center; color: #999; padding: 20px;">No records yet</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-  </div>
-  
-  <div id="modal" onclick="closeModal()">
-    <div id="modalContent" onclick="event.stopPropagation()">
-      <h2 style="text-align: center; margin-bottom: 20px;">🏆 LEADERBOARD 🏆</h2>
-      <div id="leaderboardList"></div>
-      <button onclick="closeModal()" style="width: 100%; margin-top: 20px; background: #ee0979; color: white;">Close</button>
+
+    <div id="countdown-overlay">
+        <div id="countdown-number">3</div>
     </div>
-  </div>
 
-  <script>
-    const socket = io();
-    let myPlayerId = null;
-    let gameState = 'lobby';
-    let myClicks = 0;
-    let trackLength = 5000;
-    let lapsToWin = 3;
-    let myPlayer = null;
-    let allPlayers = {};
-    let leaderboardData = [];
+    <script>
+        const socket = io();
+        let myPlayerId = null;
+        let gameState = 'lobby';
+        let players = {};
+        let powerups = [];
+        let obstacles = [];
+        let trackLength = 5000;
+        let lapsToWin = 3;
 
-    const clickButton = document.getElementById('clickButton');
-    const startButton = document.getElementById('startButton');
-    const resetButton = document.getElementById('resetButton');
-    const countdownOverlay = document.getElementById('countdown-overlay');
-    const speedometer = document.getElementById('speedometer');
-    const clickCounter = document.getElementById('clickCounter');
-    const currentLapDisplay = document.getElementById('currentLap');
-    const progressFill = document.getElementById('progressFill');
-    const lapIndicator = document.getElementById('lapIndicator');
-    const chatBox = document.getElementById('chatBox');
-    const minimap = document.getElementById('minimap');
+        // DOM elements
+        const usernameScreen = document.getElementById('username-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const usernameForm = document.getElementById('username-form');
+        const usernameInput = document.getElementById('username-input');
+        const clickButton = document.getElementById('click-button');
+        const powerupButton = document.getElementById('powerup-button');
+        const startButton = document.getElementById('start-button');
+        const resetButton = document.getElementById('reset-button');
+        const track = document.getElementById('track');
+        const gameStateDisplay = document.getElementById('game-state');
+        const speedDisplay = document.getElementById('speed-display');
+        const lapDisplay = document.getElementById('lap-display');
+        const clicksDisplay = document.getElementById('clicks-display');
+        const positionDisplay = document.getElementById('position-display');
+        const playerList = document.getElementById('player-list');
+        const chatMessages = document.getElementById('chat-messages');
+        const chatInput = document.getElementById('chat-input');
+        const leaderboardList = document.getElementById('leaderboard-list');
+        const countdownOverlay = document.getElementById('countdown-overlay');
+        const countdownNumber = document.getElementById('countdown-number');
 
-    function joinGame() {
-      const username = document.getElementById('usernameInput').value.trim() || 'Player';
-      socket.emit('joinGame', username);
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('gameContainer').style.display = 'block';
-    }
+        // Join game
+        usernameForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = usernameInput.value.trim();
+            if (username) {
+                socket.emit('joinGame', username);
+                usernameScreen.classList.add('hidden');
+                gameScreen.classList.remove('hidden');
+            }
+        });
 
-    function sendChat() {
-      const input = document.getElementById('chatMessage');
-      if (input.value.trim()) {
-        socket.emit('chatMessage', input.value.trim());
-        input.value = '';
-      }
-    }
+        // Click to race
+        clickButton.addEventListener('click', () => {
+            if (gameState === 'racing') {
+                socket.emit('click');
+            }
+        });
 
-    function showLeaderboard() {
-      document.getElementById('modal').style.display = 'flex';
-      updateLeaderboardDisplay();
-    }
+        // Use powerup
+        powerupButton.addEventListener('click', () => {
+            socket.emit('usePowerup');
+        });
 
-    function closeModal() {
-      document.getElementById('modal').style.display = 'none';
-    }
+        // Start race
+        startButton.addEventListener('click', () => {
+            socket.emit('startRace');
+        });
 
-    function updateLeaderboardDisplay() {
-      const list = document.getElementById('leaderboardList');
-      list.innerHTML = '';
-      
-      if (leaderboardData.length === 0) {
-        list.innerHTML = '<p style="text-align: center; opacity: 0.7;">No records yet. Be the first!</p>';
-        return;
-      }
-      
-      leaderboardData.forEach((entry, index) => {
-        const div = document.createElement('div');
-        div.className = 'leaderboard-entry';
-        const rankClass = index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : '';
-        const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
-        div.innerHTML = `
-          <span class="${rankClass}">${medal} ${entry.name}</span>
-          <span>${(entry.time / 1000).toFixed(2)}s (${entry.clicks} clicks)</span>
-        `;
-        list.appendChild(div);
-      });
-    }
+        // Reset game
+        resetButton.addEventListener('click', () => {
+            socket.emit('reset');
+        });
 
-    socket.on('init', (data) => {
-      myPlayerId = data.playerId;
-      gameState = data.gameState;
-      trackLength = data.trackLength;
-      lapsToWin = data.lapsToWin;
-      allPlayers = data.players;
-      myPlayer = data.players[myPlayerId];
-      leaderboardData = data.leaderboard || [];
-      
-      for (let id in data.players) {
-        createPlayerCar(data.players[id]);
-      }
-      
-      // Create powerups and obstacles
-      data.powerups.forEach(p => createPowerup(p));
-      data.obstacles.forEach(o => createObstacle(o));
-      
-      updatePlayerList(data.players);
-      updateButtonStates();
-      updateMinimap();
-    });
+        // Chat
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chatMessage', chatInput.value.trim());
+                chatInput.value = '';
+            }
+        });
 
-    socket.on('playerJoined', (player) => {
-      allPlayers[player.id] = player;
-      createPlayerCar(player);
-      updatePlayerList(allPlayers);
-    });
+        // Socket events
+        socket.on('init', (data) => {
+            myPlayerId = data.playerId;
+            players = data.players;
+            gameState = data.gameState;
+            powerups = data.powerups;
+            obstacles = data.obstacles;
+            trackLength = data.trackLength;
+            lapsToWin = data.lapsToWin;
+            
+            updateGameState(data.gameState);
+            renderTrack();
+            updatePlayerList();
+            updateLeaderboard(data.leaderboard);
+        });
 
-    socket.on('playerLeft', (data) => {
-      const car = document.getElementById(`car-${data.id}`);
-      const lane = document.getElementById(`lane-${data.id}`);
-      if (car) car.remove();
-      if (lane) lane.remove();
-      delete allPlayers[data.id];
-      updatePlayerList(allPlayers);
-      addChatMessage(`${data.name} left the race`, '#ff6b6b');
-    });
+        socket.on('playerJoined', (player) => {
+            players[player.id] = player;
+            updatePlayerList();
+            renderTrack();
+            showNotification(`${player.name} joined the game!`);
+        });
 
-    socket.on('gameStateChange', (data) => {
-      gameState = data.state;
-      updateButtonStates();
-      
-      if (data.state === 'finished') {
-        setTimeout(() => {
-          alert('🏁 Race finished! Check the leaderboard!');
-        }, 500);
-      }
-    });
+        socket.on('playerLeft', (data) => {
+            delete players[data.id];
+            updatePlayerList();
+            renderTrack();
+            showNotification(`${data.name} left the game`);
+        });
 
-    socket.on('countdown', (value) => {
-      countdownOverlay.style.display = 'flex';
-      if (value > 0) {
-        countdownOverlay.textContent = value;
-        countdownOverlay.classList.remove('go-text');
-      } else {
-        countdownOverlay.textContent = 'GO!';
-        countdownOverlay.classList.add('go-text');
-        setTimeout(() => {
-          countdownOverlay.style.display = 'none';
-        }, 1000);
-      }
-    });
+        socket.on('gameStateChange', (data) => {
+            gameState = data.state;
+            updateGameState(data.state);
+        });
 
-    socket.on('raceStart', () => {
-      myClicks = 0;
-      updateStats();
-    });
+        socket.on('countdown', (value) => {
+            if (value > 0) {
+                countdownOverlay.style.display = 'flex';
+                countdownNumber.textContent = value;
+                countdownNumber.style.animation = 'none';
+                setTimeout(() => countdownNumber.style.animation = 'pulse 1s ease-in-out', 10);
+            } else {
+                countdownNumber.textContent = 'GO!';
+                setTimeout(() => {
+                    countdownOverlay.style.display = 'none';
+                }, 1000);
+            }
+        });
 
-    socket.on('trackElements', (data) => {
-      document.querySelectorAll('.powerup, .obstacle').forEach(el => el.remove());
-      data.powerups.forEach(p => createPowerup(p));
-      data.obstacles.forEach(o => createObstacle(o));
-    });
+        socket.on('raceStart', () => {
+            clickButton.disabled = false;
+        });
 
-    socket.on('gameUpdate', (players) => {
-      allPlayers = players;
-      myPlayer = players[myPlayerId];
-      
-      for (let id in players) {
-        const car = document.getElementById(`car-${id}`);
-        if (car) {
-          const totalProgress = players[id].position;
-          const viewportWidth = document.getElementById('trackContainer').offsetWidth;
-          const pixelPosition = (totalProgress / (trackLength * lapsToWin)) * viewportWidth;
-          car.style.left = `${Math.min(pixelPosition, viewportWidth - 60)}px`;
-          
-          if (players[id].finished) {
-            car.classList.add('finished');
-          }
-          
-          if (players[id].isInvincible) {
-            car.classList.add('invincible');
-          } else {
-            car.classList.remove('invincible');
-          }
+        socket.on('gameUpdate', (updatedPlayers) => {
+            players = updatedPlayers;
+            renderTrack();
+            updateMyStats();
+        });
+
+        socket.on('trackElements', (data) => {
+            powerups = data.powerups;
+            obstacles = data.obstacles;
+            renderTrack();
+        });
+
+        socket.on('powerupCollected', (data) => {
+            const powerup = powerups.find(p => p.id === data.powerupId);
+            if (powerup) powerup.active = false;
+            
+            if (data.playerId === myPlayerId) {
+                powerupButton.disabled = false;
+                showNotification('Powerup collected! ⚡');
+            }
+            renderTrack();
+        });
+
+        socket.on('playerUsedPowerup', (playerId) => {
+            if (playerId === myPlayerId) {
+                powerupButton.disabled = true;
+            }
+        });
+
+        socket.on('obstacleHit', (data) => {
+            if (data.playerId === myPlayerId) {
+                showNotification('Hit an obstacle! 💥', 'warning');
+            }
+        });
+
+        socket.on('lapComplete', (data) => {
+            if (data.id === myPlayerId) {
+                showNotification(`Lap ${data.lap}/${lapsToWin} complete! 🏁`);
+            }
+        });
+
+        socket.on('playerFinished', (data) => {
+            const time = (data.time / 1000).toFixed(2);
+            showNotification(`${data.name} finished in ${time}s! Position: ${data.position}`);
+        });
+
+        socket.on('chatMessage', (data) => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML = `<span class="chat-sender" style="color: ${data.color}">${data.player}:</span>${data.message}`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        });
+
+        socket.on('leaderboardUpdate', (leaderboard) => {
+            updateLeaderboard(leaderboard);
+        });
+
+        socket.on('engineBlown', (data) => {
+            if (data.playerId === myPlayerId) {
+                showNotification('💥 ENGINE BLOWN! Repairs in progress...', 'error');
+                clickButton.disabled = true;
+                clickButton.style.background = 'linear-gradient(135deg, #666 0%, #333 100%)';
+            } else {
+                showNotification(`💥 ${data.playerName}'s engine blew up!`);
+            }
+            renderTrack();
+        });
+
+        socket.on('engineRepaired', (data) => {
+            if (data.playerId === myPlayerId) {
+                showNotification('✅ Engine repaired! Back in the race!');
+                if (gameState === 'racing') {
+                    clickButton.disabled = false;
+                    clickButton.style.background = 'linear-gradient(135deg, #FF6B6B 0%, #C92A2A 100%)';
+                }
+            }
+            renderTrack();
+        });
+
+        socket.on('gameReset', (data) => {
+            players = data.players;
+            powerups = data.powerups;
+            obstacles = data.obstacles;
+            gameState = data.state;
+            updateGameState(data.state);
+            renderTrack();
+            clickButton.disabled = true;
+            powerupButton.disabled = true;
+        });
+
+        function renderTrack() {
+            track.innerHTML = '<div class="finish-line"></div>';
+            
+            const trackRect = track.getBoundingClientRect();
+            const trackWidth = trackRect.width;
+
+            // Render powerups with consistent vertical positions
+            powerups.forEach((powerup, index) => {
+                if (powerup.active) {
+                    const el = document.createElement('div');
+                    el.className = 'powerup';
+                    el.textContent = '⚡';
+                    const left = (powerup.position / trackLength) * (trackWidth - 100);
+                    el.style.left = `${left}px`;
+                    // Alternate between top and bottom half
+                    const topPosition = (index % 2 === 0) ? 20 + (Math.random() * 20) : 60 + (Math.random() * 20);
+                    el.style.top = `${topPosition}%`;
+                    track.appendChild(el);
+                }
+            });
+
+            // Render obstacles with consistent vertical positions
+            obstacles.forEach((obstacle, index) => {
+                const el = document.createElement('div');
+                el.className = 'obstacle';
+                el.textContent = '🚧';
+                const left = (obstacle.position / trackLength) * (trackWidth - 100);
+                el.style.left = `${left}px`;
+                // Alternate between top and bottom half
+                const topPosition = (index % 2 === 0) ? 15 + (Math.random() * 25) : 55 + (Math.random() * 25);
+                el.style.top = `${topPosition}%`;
+                track.appendChild(el);
+            });
+
+            // Render cars
+            const playerArray = Object.values(players);
+            playerArray.forEach((player, index) => {
+                const car = document.createElement('div');
+                car.className = 'car';
+                
+                // Add engine blown class if applicable
+                if (player.engineBlown) {
+                    car.classList.add('engine-blown');
+                }
+                
+                const progress = Math.min(player.position / (trackLength * lapsToWin), 1);
+                const left = progress * (trackWidth - 100);
+                car.style.left = `${left}px`;
+                car.style.top = `${(index * 15) + 10}%`;
+                
+                const statusIcon = player.engineBlown ? '💥' : '';
+                
+                car.innerHTML = `
+                    <div class="car-label">${player.name} ${statusIcon}</div>
+                    <div class="car-body" style="background: ${player.color}${player.engineBlown ? '; opacity: 0.5' : ''}">
+                        <div class="car-window"></div>
+                    </div>
+                `;
+                
+                track.appendChild(car);
+            });
         }
-      }
-      
-      if (myPlayer) {
-        updateStats();
-        updateButtonStates();
-        updateMinimap();
-      }
-      
-      updatePlayerList(players);
-    });
 
-    socket.on('powerupCollected', (data) => {
-      const powerup = document.getElementById(data.powerupId);
-      if (powerup) powerup.remove();
-      
-      if (data.playerId === myPlayerId) {
-        addChatMessage('⚡ BOOST collected! Press button to use!', '#FFD700');
-      }
-    });
-
-    socket.on('obstacleHit', (data) => {
-      if (data.playerId === myPlayerId) {
-        addChatMessage('💥 Hit obstacle! Speed reduced!', '#ff6b6b');
-      }
-    });
-
-    socket.on('lapComplete', (data) => {
-      if (data.id === myPlayerId) {
-        addChatMessage(`🏁 Lap ${data.lap}/${lapsToWin} complete!`, '#00ff00');
-      } else {
-        addChatMessage(`${data.name} completed lap ${data.lap}`, '#4ecdc4');
-      }
-    });
-
-    socket.on('playerFinished', (data) => {
-      const place = ['🥇 1st', '🥈 2nd', '🥉 3rd', '4th', '5th', '6th', '7th', '8th'];
-      const msg = `${data.name} finished ${place[data.position - 1] || data.position + 'th'}! Time: ${(data.time / 1000).toFixed(2)}s`;
-      addChatMessage(msg, data.id === myPlayerId ? '#FFD700' : '#4ecdc4');
-      
-      if (data.id === myPlayerId) {
-        setTimeout(() => {
-          alert(`🏆 You finished ${place[data.position - 1] || data.position + 'th'}!\nTime: ${(data.time / 1000).toFixed(2)}s\nClicks: ${data.clicks}`);
-        }, 100);
-      }
-    });
-
-    socket.on('gameReset', (data) => {
-      gameState = data.state;
-      myClicks = 0;
-      allPlayers = data.players;
-      myPlayer = data.players[myPlayerId];
-      
-      updateStats();
-      updateButtonStates();
-      
-      for (let id in data.players) {
-        const car = document.getElementById(`car-${id}`);
-        if (car) {
-          car.classList.remove('finished', 'invincible');
-          car.style.left = '0px';
+        function updateGameState(state) {
+            const stateText = {
+                'lobby': '🏁 Waiting in Lobby...',
+                'countdown': '⏱️ Get Ready!',
+                'racing': '🏎️ RACE IN PROGRESS!',
+                'finished': '🏆 Race Complete!'
+            };
+            gameStateDisplay.textContent = stateText[state] || state;
+            
+            startButton.disabled = state !== 'lobby';
+            resetButton.disabled = state === 'racing';
         }
-      }
-      
-      document.querySelectorAll('.powerup, .obstacle').forEach(el => el.remove());
-      data.powerups.forEach(p => createPowerup(p));
-      data.obstacles.forEach(o => createObstacle(o));
-      
-      updatePlayerList(data.players);
-      updateMinimap();
-    });
 
-    socket.on('chatMessage', (data) => {
-      addChatMessage(`${data.player}: ${data.message}`, data.color);
-    });
-
-    socket.on('leaderboardUpdate', (data) => {
-      leaderboardData = data;
-    });
-
-    function createPlayerCar(player) {
-      const track = document.getElementById('track');
-      
-      const lane = document.createElement('div');
-      lane.className = 'lane';
-      lane.id = `lane-${player.id}`;
-      
-      const car = document.createElement('div');
-      car.className = 'car';
-      car.id = `car-${player.id}`;
-      car.style.backgroundColor = player.color;
-      car.textContent = '🏎️';
-      car.title = player.name;
-      
-      lane.appendChild(car);
-      track.appendChild(lane);
-    }
-
-    function createPowerup(powerup) {
-      const track = document.getElementById('track');
-      const div = document.createElement('div');
-      div.className = 'powerup';
-      div.id = powerup.id;
-      div.textContent = '⚡';
-      div.style.left = `${(powerup.position / (trackLength * lapsToWin)) * 100}%`;
-      div.style.top = '50%';
-      div.style.transform = 'translateY(-50%)';
-      track.appendChild(div);
-    }
-
-    function createObstacle(obstacle) {
-      const track = document.getElementById('track');
-      const div = document.createElement('div');
-      div.className = 'obstacle';
-      div.id = obstacle.id;
-      div.textContent = '🚧';
-      div.style.left = `${(obstacle.position / (trackLength * lapsToWin)) * 100}%`;
-      div.style.top = '50%';
-      div.style.transform = 'translateY(-50%)';
-      track.appendChild(div);
-    }
-
-    function updatePlayerList(players) {
-      const list = document.getElementById('playerList');
-      list.innerHTML = '';
-      
-      const sortedPlayers = Object.values(players).sort((a, b) => b.position - a.position);
-      
-      sortedPlayers.forEach((player, index) => {
-        const badge = document.createElement('div');
-        badge.className = 'player-badge';
-        badge.style.borderLeft = `4px solid ${player.color}`;
-        badge.innerHTML = `
-          <span>${index + 1}. ${player.name}${player.finished ? ' ✓' : ''}</span>
-          <span>Lap ${player.currentLap}/${lapsToWin}</span>
-        `;
-        list.appendChild(badge);
-      });
-    }
-
-    function updateStats() {
-      if (!myPlayer) return;
-      speedometer.textContent = Math.floor(myPlayer.speed);
-      clickCounter.textContent = myClicks;
-      currentLapDisplay.textContent = `${myPlayer.currentLap}/${lapsToWin}`;
-      
-      const progress = (myPlayer.position / (trackLength * lapsToWin)) * 100;
-      progressFill.style.width = `${Math.min(progress, 100)}%`;
-      lapIndicator.textContent = `Lap ${myPlayer.currentLap}/${lapsToWin} - ${Math.floor(progress)}%`;
-    }
-
-    function updateButtonStates() {
-      if (!myPlayer) return;
-      startButton.disabled = gameState !== 'lobby';
-      clickButton.disabled = gameState !== 'racing' || myPlayer.finished;
-      resetButton.disabled = gameState === 'countdown';
-      
-      if (myPlayer.hasPowerup) {
-        clickButton.classList.add('has-powerup');
-        clickButton.textContent = '⚡ USE BOOST! ⚡';
-      } else {
-        clickButton.classList.remove('has-powerup');
-        clickButton.textContent = '🏎️ CLICK TO DRIVE! 🏎️';
-      }
-    }
-
-    function updateMinimap() {
-      minimap.innerHTML = '';
-      const sortedPlayers = Object.values(allPlayers).sort((a, b) => b.position - a.position);
-      
-      sortedPlayers.forEach(player => {
-        const dot = document.createElement('div');
-        dot.className = 'minimap-dot';
-        dot.style.backgroundColor = player.color;
-        const progress = (player.position / (trackLength * lapsToWin)) * 100;
-        dot.style.left = `${Math.min(progress, 100)}%`;
-        if (player.id === myPlayerId) {
-          dot.style.boxShadow = '0 0 10px white';
+        function updateMyStats() {
+            const me = players[myPlayerId];
+            if (me) {
+                speedDisplay.textContent = Math.floor(me.speed);
+                lapDisplay.textContent = `${me.currentLap}/${lapsToWin}`;
+                clicksDisplay.textContent = me.clicks;
+                
+                const sorted = Object.values(players)
+                    .filter(p => !p.finished)
+                    .sort((a, b) => b.position - a.position);
+                const position = sorted.findIndex(p => p.id === myPlayerId) + 1;
+                positionDisplay.textContent = position || '-';
+            }
         }
-        minimap.appendChild(dot);
-      });
-    }
 
-    function addChatMessage(message, color = '#ffffff') {
-      const div = document.createElement('div');
-      div.className = 'chat-message';
-      div.style.borderLeft = `3px solid ${color}`;
-      div.textContent = message;
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
-      
-      // Keep only last 20 messages
-      while (chatBox.children.length > 20) {
-        chatBox.removeChild(chatBox.firstChild);
-      }
-    }
-
-    // Click to drive
-    clickButton.addEventListener('click', () => {
-      if (gameState === 'racing' && myPlayer && !myPlayer.finished) {
-        if (myPlayer.hasPowerup) {
-          socket.emit('usePowerup');
-        } else {
-          socket.emit('click');
-          myClicks++;
-          updateStats();
+        function updatePlayerList() {
+            playerList.innerHTML = '';
+            Object.values(players).forEach(player => {
+                const li = document.createElement('li');
+                li.className = 'player-item';
+                li.innerHTML = `
+                    <div>
+                        <div class="player-name" style="color: ${player.color}">${player.name}</div>
+                        <div class="player-status">${player.finished ? '🏁 Finished' : 'Racing'}</div>
+                    </div>
+                `;
+                playerList.appendChild(li);
+            });
         }
-      }
-    });
 
-    // Start race
-    startButton.addEventListener('click', () => {
-      socket.emit('startRace');
-    });
-
-    // Reset race
-    resetButton.addEventListener('click', () => {
-      socket.emit('reset');
-    });
-
-    // Spacebar and Enter controls
-    document.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && gameState === 'racing' && myPlayer && !myPlayer.finished) {
-        e.preventDefault();
-        clickButton.click();
-      }
-      
-      if (e.code === 'Enter') {
-        const chatInput = document.getElementById('chatMessage');
-        if (document.activeElement === chatInput) {
-          sendChat();
+        function updateLeaderboard(leaderboard) {
+            if (!leaderboard || leaderboard.length === 0) {
+                leaderboardList.innerHTML = '<li style="text-align: center; color: #999; padding: 20px;">No records yet</li>';
+                return;
+            }
+            
+            leaderboardList.innerHTML = '';
+            leaderboard.forEach((entry, index) => {
+                const li = document.createElement('li');
+                li.className = 'leaderboard-item';
+                const time = (entry.time / 1000).toFixed(2);
+                li.innerHTML = `
+                    <span class="leaderboard-rank">${index + 1}.</span>
+                    <span class="leaderboard-name">${entry.name}</span>
+                    <span class="leaderboard-time">${time}s</span>
+                `;
+                leaderboardList.appendChild(li);
+            });
         }
-      }
-    });
 
-    // Username input - press Enter to join
-    document.getElementById('usernameInput').addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') {
-        joinGame();
-      }
-    });
-  </script>
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+
+        // Keyboard support for clicking
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameState === 'racing') {
+                e.preventDefault();
+                socket.emit('click');
+            }
+        });
+    </script>
 </body>
 </html>
